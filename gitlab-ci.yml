@@ -1,0 +1,138 @@
+stages:
+  - dind_job
+  - build
+  - test
+  - dockerize_and_push_to_harbor
+  - deploy_dev
+  - deploy_pilot
+  - deploy_stage
+  - deploy_prod
+
+dind_job:
+  stage: dind_job
+  tags:
+    - "app-name"
+  variables:
+    # This variable is shared by both the DinD service and Docker client.
+    # For the service, it will instruct DinD to create `docker.sock` here.
+    # For the client, it tells the Docker client which Docker Unix socket to connect to.
+    DOCKER_HOST: "unix:///runner/services/docker/docker.sock"
+  services:
+    - docker:24.0.5-dind
+  image: docker:24.0.5
+  script:
+    - docker version
+
+variables:
+  APP_NAME: <app-name>
+  DOCKER_REGISTRY: <private-registry-DNS>
+  DOCKER_IMAGE_NAME: <docker-image-name>
+
+# Build the Spring Boot app
+build:
+  stage: build
+  tags:
+    - "app-name"
+  image: maven:3-amazoncorretto-21
+  script:
+    - echo $PATH
+    - mvn clean install -DskipTests
+  artifacts:
+    paths:
+      - target/*.jar
+
+# Run unit tests
+test:
+  stage: test
+  tags:
+    - "app-name"
+  image: maven:3-amazoncorretto-21
+  script:
+    - mvn test
+  artifacts:
+    paths:
+      - target/*.jar
+
+# Dockerize the Spring Boot app (Build Docker Image)
+dockerize_and_push_to_harbor:
+  stage: dockerize_and_push_to_harbor
+  tags:
+    - "app-name"
+  script:
+    - |
+      # Set the image tag dynamically based on the branch name or a custom environment variable
+      if [[ "$CI_COMMIT_REF_NAME" == "main" ]]; then
+        ENV_NAME="prod"
+      elif [[ "$CI_COMMIT_REF_NAME" == "deploy/dev" ]]; then
+        ENV_NAME="dev"
+      elif [[ "$CI_COMMIT_REF_NAME" == "deploy/pilot" ]]; then
+        ENV_NAME="pilot"
+      elif [[ "$CI_COMMIT_REF_NAME" == "deploy/stage" ]]; then
+        ENV_NAME="stage"
+      else
+        exit 1
+      fi
+
+      echo $ENV_NAME
+
+      # Build the Docker image with the app name and environment tag
+      IMAGE_TAG="$DOCKER_IMAGE_NAME:$ENV_NAME"
+      docker build -t $DOCKER_REGISTRY/$IMAGE_TAG .
+
+      # Log in to Harbor and push the image
+      docker login $DOCKER_REGISTRY -u="$HARBOR_USERNAME" -p="$HARBOR_PASSWORD"
+      docker push $DOCKER_REGISTRY/$IMAGE_TAG
+  only:
+    - deploy/dev
+    - deploy/pilot
+    - deploy/stage
+    - main
+
+# Deploy to dev environment
+deploy_dev:
+  stage: deploy_dev
+  image: alpine/ansible
+  tags:
+    - "app-name"
+  script:
+    - echo "Running deployment on dev environment"
+    - ansible-playbook -i ansible/inventory/dev.ini ansible/playbook.yml -e "ENV=dev" --ssh-extra-args="-o StrictHostKeyChecking=no"
+  only:
+    - deploy/dev
+
+# Deploy to pilot environment
+deploy_pilot:
+  stage: deploy_pilot
+  image: alpine/ansible
+  tags:
+    - "app-name"
+  script:
+    - echo "Running deployment on pilot environment"
+    - ansible-playbook -i ansible/inventory/pilot.ini ansible/playbook.yml -e "ENV=pilot" --ssh-extra-args="-o StrictHostKeyChecking=no"
+  only:
+    - deploy/pilot
+
+# Deploy to stage environment
+deploy_stage:
+  stage: deploy_stage
+  image: alpine/ansible
+  tags:
+    - "app-name"
+  script:
+    - echo "Running deployment on stage environment"
+    - ansible-playbook -i ansible/inventory/stage.ini ansible/playbook.yml -e "ENV=stage" --ssh-extra-args="-o StrictHostKeyChecking=no"
+  only:
+    - deploy/stage
+
+# Deploy to prod environment
+deploy_prod:
+  stage: deploy_prod
+  image: alpine/ansible
+  tags:
+    - "app-name"
+  script:
+    - echo "Running deployment on prod environment"
+    - ansible-playbook -i ansible/inventory/prod.ini ansible/playbook.yml -e "ENV=prod" --ssh-extra-args="-o StrictHostKeyChecking=no"
+  when: manual
+  only:
+    - main

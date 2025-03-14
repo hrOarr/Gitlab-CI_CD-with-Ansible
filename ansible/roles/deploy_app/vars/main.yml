@@ -1,0 +1,5 @@
+---
+# Add any environment-specific variables here
+# e.g., configure spring profiles, database connection, etc.
+
+spring_profiles_active: "{{ target_env }}"  # Set Spring profile (dev, pilot, prod)

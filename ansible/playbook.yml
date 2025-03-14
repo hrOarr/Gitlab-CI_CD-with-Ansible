@@ -1,0 +1,8 @@
+---
+- name: Deploy Spring Boot Docker Application
+  hosts: web
+  become: true
+  vars:
+    env: "{{ ENV }}"  # Set the environment variable (passed via the command line)
+  roles:
+    - deploy_app

@@ -1,0 +1,5 @@
+---
+# Default values for deployment
+
+app_dir: /usr/local/docker/<app-name>   # Directory where docker-compose.yml is located
+compose_file: "{{ app_dir }}/docker-compose.yml"  # Path to docker-compose.yml file
