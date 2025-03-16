@@ -2,7 +2,7 @@ stages:
   - dind_job
   - build
   - test
-  - dockerize_and_push_to_harbor
+  - dockerize_and_push_to_docker_registry
   - deploy_dev
   - deploy_pilot
   - deploy_stage
@@ -54,8 +54,8 @@ test:
       - target/*.jar
 
 # Dockerize the Spring Boot app (Build Docker Image)
-dockerize_and_push_to_harbor:
-  stage: dockerize_and_push_to_harbor
+dockerize_and_push_to_docker_registry:
+  stage: dockerize_and_push_to_docker_registry
   tags:
     - "app-name"
   script:
